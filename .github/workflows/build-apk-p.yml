@@ -1,0 +1,173 @@
+name: Build Android APK Personal
+
+on:
+  push:
+    branches:
+      - "*"        # 任意分支都能觸發
+    tags-ignore:    # 忽略所有 tag push
+      - '**'
+  workflow_dispatch:
+    inputs:
+      custom_version:
+        description: "輸入版本號（tag 模式必填，例如 1.3.11.004）"
+        required: false
+      buildMode:
+        description: "建置模式 (full=乾淨建置 / incremental=增量建置)"
+        required: true
+        default: "full"
+        type: choice
+        options:
+          - full
+          - incremental
+      buildTarget:
+        description: "建置來源 (branch / tag)"
+        required: true
+        default: "branch"
+        type: choice
+        options:
+          - branch
+          - tag
+
+permissions:
+  contents: write
+
+jobs:
+  release_build:
+    runs-on: ubuntu-latest
+
+    env:
+      USER_NAME: ${{ github.repository_owner }}
+      REPO_NAME: ${{ github.event.repository.name }}
+      BRANCH_NAME: ${{ github.ref_name }}
+
+    steps:
+      - name: Validate inputs for tag builds
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.buildTarget == 'tag' }}
+        run: |
+          if [ -z "${{ github.event.inputs.custom_version }}" ]; then
+            echo "ERROR: tag build requires 'custom_version' (e.g., 1.3.11.004)"
+            exit 1
+          fi
+          TAG="v${{ github.event.inputs.custom_version }}"
+          if ! git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
+            echo "ERROR: Tag ${TAG} not found on remote."
+            exit 1
+          fi
+          echo "Tag ${TAG} verified."
+
+      - name: Checkout
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ github.ref }}
+
+      - name: Generate BuildEnv.ts
+        run: |
+          mkdir -p constants
+          echo "export const BUILD_ENV = {
+            USER_NAME: '${{ github.repository_owner }}',
+            REPO_NAME: '${{ github.event.repository.name }}',
+            BRANCH_NAME: '${{ github.ref_name }}'
+          };" > constants/BuildEnv.ts
+
+      - name: Show BuildEnv
+        run: cat constants/BuildEnv.ts
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18
+          cache: "yarn"
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
+
+      - name: Get version from package.json (fallback when custom_version not provided)
+        id: package-version
+        env:
+          CUSTOM_VERSION: ${{ github.event.inputs.custom_version }}
+        run: |
+          default_version=$(node -p "require('./package.json').version")
+          final_version="$CUSTOM_VERSION"
+          if [ -z "$final_version" ]; then
+            final_version="${default_version}"
+          fi
+          echo "version=${final_version}" >> $GITHUB_OUTPUT
+          echo "Resolved version=${final_version}"
+
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: "zulu"
+          java-version: "17"
+
+      - name: Prebuild TV App
+        run: yarn prebuild
+
+      - name: Update Android versionCode and versionName
+        run: |
+          VERSION="${{ steps.package-version.outputs.version }}"
+          CODE=$(echo "$VERSION" | awk -F. '{ printf "%d%03d%03d%03d", $1, $2, $3, $4 }')
+          sed -i "s/versionCode .*/versionCode ${CODE}/" android/app/build.gradle || true
+          sed -i "s/versionName \".*\"/versionName \"${VERSION}\"/" android/app/build.gradle || true
+          echo "Updated build.gradle versionCode=${CODE}, versionName=${VERSION}"
+
+      - name: Build TV APK
+        run: |
+          export USER_NAME=${{ env.USER_NAME }}
+          export REPO_NAME=${{ env.REPO_NAME }}
+          export BRANCH_NAME=${{ env.BRANCH_NAME }}
+          
+          if [ "${{ github.event.inputs.buildMode }}" = "full" ]; then
+            echo "Running full clean build..."
+            rm -rf node_modules
+            yarn cache clean
+            yarn install --frozen-lockfile
+            yarn build
+          else
+            echo "Running incremental build..."
+            yarn build
+          fi
+
+      - name: Rename APK file with version (branch aligned)
+        id: rename-apk
+        run: |
+          mkdir -p artifacts
+          VERSION="${{ steps.package-version.outputs.version }}"
+          BRANCH="${BRANCH_NAME//\//-}"
+          if [ "$BRANCH" = "main" ] || [ "$BRANCH" = "master" ]; then
+            FINAL_VERSION="${VERSION}"
+          else
+            FINAL_VERSION="${VERSION}-${BRANCH}"
+          fi
+          cp android/app/build/outputs/apk/release/app-release.apk "artifacts/orionTV.${FINAL_VERSION}.apk"
+          echo "apk_version=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "APK prepared: artifacts/orionTV.${FINAL_VERSION}.apk"
+
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.rename-apk.outputs.apk_version }}
+          path: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
+          retention-days: 7
+
+      - name: Check APK version info
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y aapt || sudo apt-get install -y android-tools-aapt
+          aapt dump badging "artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk" | grep version
+
+      - name: Create Release and Upload APK
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.rename-apk.outputs.apk_version }}
+          name: Release v${{ steps.rename-apk.outputs.apk_version }}
+          body: |
+            Automated release for version v${{ steps.rename-apk.outputs.apk_version }}.
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          files: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
