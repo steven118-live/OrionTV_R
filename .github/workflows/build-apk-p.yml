@@ -3,9 +3,9 @@ name: Build Android APK Personal
 on:
   push:
     branches:
-      - "*"         # 任意分支推送觸發
+      - "*"
     tags-ignore:
-      - '**'        # 忽略所有 tag push
+      - '**'
   workflow_dispatch:
     inputs:
       custom_version:
@@ -40,7 +40,6 @@ jobs:
       BRANCH_NAME: ${{ github.ref_name }}
 
     steps:
-      # 1. 驗證 tag 模式輸入
       - name: Validate inputs for tag builds
         if: ${{ github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag' }}
         run: |
@@ -54,25 +53,13 @@ jobs:
             exit 1
           fi
           echo "TAG=${TAG}" >> $GITHUB_ENV
-          echo "Resolved version: ${{ inputs.custom_version }} (from tag ${TAG})"
 
-      # 2. 決定要 checkout 的 ref
-      - name: Determine checkout ref
-        id: checkout-ref
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" && "${{ inputs.buildTarget }}" == "tag" ]]; then
-            echo "ref=v${{ inputs.custom_version }}" >> $GITHUB_OUTPUT
-          else
-            echo "ref=${{ github.ref }}" >> $GITHUB_OUTPUT
-          fi
-
-      # 3. Checkout 正確的 commit（branch 或 tag）
+      # 正確 checkout 到 tag 或 branch
       - name: Checkout code
         uses: actions/checkout@v3
         with:
-          ref: ${{ steps.checkout-ref.outputs.ref }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag' && format('v{0}', inputs.custom_version) || github.ref }}
 
-      # 4. 產生 BuildEnv.ts
       - name: Generate BuildEnv.ts
         run: |
           mkdir -p constants
@@ -85,16 +72,15 @@ jobs:
       - name: Show BuildEnv
         run: cat constants/BuildEnv.ts
 
-      # 5. Setup Node
       - name: Set up Node.js
         uses: actions/setup-node@v3
         with:
           node-version: 18
           cache: "yarn"
 
-      # 6. 依建置模式決定是否 clean
-      - name: Clean install if full build
-        if: ${{ inputs.buildMode == 'full' || github.event_name == 'push' }}  # push 時預設 full
+      # full 模式才 clean，避免重複安裝
+      - name: Clean for full build
+        if: ${{ inputs.buildMode == 'full' }}
         run: |
           rm -rf node_modules
           yarn cache clean
@@ -102,50 +88,48 @@ jobs:
       - name: Install dependencies
         run: yarn install --frozen-lockfile
 
-      # 7. 決定最終版本號
-      - name: Determine final version
+      # 決定版本號：tag 模式用 custom_version，否則用 package.json
+      - name: Get version
         id: version
         run: |
           if [[ "${{ inputs.buildTarget }}" == "tag" ]]; then
-            # tag 模式直接使用 custom_version（去掉開頭的 v 如果有的話）
-            VERSION="${{ inputs.custom_version }}"
+            echo "version=${{ inputs.custom_version }}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(node -p "require('./package.json').version")
+            version=$(node -p "require('./package.json').version")
+            echo "version=${version}" >> $GITHUB_OUTPUT
           fi
-          echo "version=${VERSION}" >> $GITHUB_OUTPUT
-          echo "Final version: ${VERSION}"
 
-      # 8. Setup JDK
       - name: Setup JDK
         uses: actions/setup-java@v3
         with:
           distribution: "zulu"
           java-version: "17"
 
-      # 9. Prebuild
       - name: Prebuild TV App
         run: yarn prebuild
 
-      # 10. 更新 Android versionCode / versionName（強化容錯）
       - name: Update Android versionCode and versionName
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          # 將版本號補齊成 4 段（如 1.3.11 → 1.3.11.0）
+          # 補齊成 4 段避免 awk 錯誤
           IFS='.' read -ra PARTS <<< "$VERSION"
-          while [ ${#PARTS[@]} -lt 4 ]; do PARTS+=("0"); done
-          CODE=$(printf "%d%03d%03d%03d" ${PARTS[0]} ${PARTS[1]} ${PARTS[2]} ${PARTS[3]})
+          p1=${PARTS[0]:-0} p2=${PARTS[1]:-0} p3=${PARTS[2]:-0} p4=${PARTS[3]:-0}
+          CODE=$(printf "%d%03d%03d%03d" $p1 $p2 $p3 $p4)
           
-          sed -i "s/versionCode [0-9]*/versionCode ${CODE}/" android/app/build.gradle
+          sed -i "s/versionCode .*/versionCode ${CODE}/" android/app/build.gradle
           sed -i "s/versionName \".*\"/versionName \"${VERSION}\"/" android/app/build.gradle
-          echo "Updated: versionCode=${CODE}, versionName=${VERSION}"
+          echo "Updated versionCode=${CODE}, versionName=${VERSION}"
 
-      # 11. Build（增量或已 clean）
-      - name: Build app
-        run: yarn build
+      - name: Build TV APK
+        run: |
+          if [ "${{ inputs.buildMode }}" = "full" ]; then
+            echo "Already cleaned before install"
+          fi
+          yarn build
 
-      # 12. 重新命名 APK
-      - name: Rename APK
-        id: rename
+      # 完全按照你原本的命名原則：所有 branch 都加 -branch，tag 不加
+      - name: Rename APK file
+        id: rename-apk
         run: |
           mkdir -p artifacts
           VERSION="${{ steps.version.outputs.version }}"
@@ -154,53 +138,49 @@ jobs:
           
           if [[ "${{ inputs.buildTarget }}" == "tag" ]]; then
             FINAL_VERSION="${VERSION}"
-          elif [[ "$BRANCH" == "main" || "$BRANCH" == "master" ]]; then
-            FINAL_VERSION="${VERSION}"
           else
             FINAL_VERSION="${VERSION}-${BRANCH_SAFE}"
           fi
           
           cp android/app/build/outputs/apk/release/app-release.apk "artifacts/orionTV.${FINAL_VERSION}.apk"
           echo "apk_version=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "APK: artifacts/orionTV.${FINAL_VERSION}.apk"
 
-      # 13. Upload artifact
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: orionTV-${{ steps.rename.outputs.apk_version }}
-          path: artifacts/orionTV.${{ steps.rename.outputs.apk_version }}.apk
+          name: ${{ steps.rename-apk.outputs.apk_version }}
+          path: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
           retention-days: 7
 
-      # 14. 驗證 APK
       - name: Check APK version info
         run: |
           sudo apt-get update && sudo apt-get install -y aapt
-          aapt dump badging "artifacts/orionTV.${{ steps.rename.outputs.apk_version }}.apk" | grep version
+          aapt dump badging "artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk" | grep version
 
-      # 15. 建立 Release（僅當不是重複的正式 tag 時創建新 tag）
-      - name: Create Release and Upload APK
+      # branch 建置才創建新 release，tag 建置只上傳 asset 到既有 release
+      - name: Create Release (only for branch builds)
+        if: ${{ inputs.buildTarget != 'tag' }}
         uses: softprops/action-gh-release@v2
-        if: ${{ inputs.buildTarget != 'tag' }}  # tag 模式下不要再創建同名 release（已存在）
         with:
-          tag_name: v${{ steps.rename.outputs.apk_version }}
-          name: Release v${{ steps.rename.outputs.apk_version }}
+          tag_name: v${{ steps.rename-apk.outputs.apk_version }}
+          name: Release v${{ steps.rename-apk.outputs.apk_version }}
           body: |
-            Automated release for version v${{ steps.rename.outputs.apk_version }}.
+            Automated release for version v${{ steps.rename-apk.outputs.apk_version }}.
             Repo: ${{ github.repository }}
-            Branch/Tag: ${{ steps.checkout-ref.outputs.ref }}
+            Branch: ${{ github.ref_name }}
             Commit: ${{ github.sha }}
           draft: false
           prerelease: false
-          files: artifacts/orionTV.${{ steps.rename.outputs.apk_version }}.apk
+          files: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # 16. （可選）如果想在 tag 建置時也附加 asset 到既有 release
-      - name: Upload asset to existing release (tag mode)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag' }}
+      - name: Upload to existing Release (tag builds)
+        if: ${{ inputs.buildTarget == 'tag' }}
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.version.outputs.version }}
-          files: artifacts/orionTV.${{ steps.rename.outputs.apk_version }}.apk
+          files: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
