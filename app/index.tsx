@@ -153,7 +153,7 @@ export default function HomeScreen() {
       try {
         await refreshPlayRecords();
         if (isLoggedInState) {
-	  useHomeStore.getState().initEpisodeSelection();
+          useHomeStore.getState().initEpisodeSelection();
           await new Promise(resolve => setTimeout(resolve, 300)); // 延遲 800ms
           useHomeStore.getState().initEpisodeSelection();
           hasInitialized.current = true;
