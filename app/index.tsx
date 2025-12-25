@@ -154,7 +154,7 @@ export default function HomeScreen() {
         await refreshPlayRecords();
         if (isLoggedInState) {
           useHomeStore.getState().initEpisodeSelection();
-          await new Promise(resolve => setTimeout(resolve, 300)); // 延遲 800ms
+          await new Promise((r) => setTimeout(r, 50));
           useHomeStore.getState().initEpisodeSelection();
           hasInitialized.current = true;
           setInitReady(true);
@@ -170,6 +170,7 @@ export default function HomeScreen() {
     apiConfigStatus.isValid,
     apiConfigStatus.isValidating,
     isLoggedInState,
+    refreshPlayRecords,
   ]);
 
   useFocusEffect(
