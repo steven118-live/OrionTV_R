@@ -71,6 +71,7 @@ interface HomeState {
   selectCategory: (category: Category) => void;
   refreshPlayRecords: () => Promise<void>;
   clearError: () => void;
+  isInitialized: boolean;
   initEpisodeSelection: () => void;
 }
 
@@ -87,7 +88,7 @@ const useHomeStore = create<HomeState>((set, get) => ({
   pageStart: 0,
   hasMore: true,
   error: null,
-
+  isInitialized: false, // 確保這裡有初始值
   initEpisodeSelection: () => {
     // 播放頁全局初始化
   },
@@ -96,7 +97,7 @@ const useHomeStore = create<HomeState>((set, get) => ({
     const { apiBaseUrl } = useSettingsStore.getState();
     await useAuthStore.getState().checkLoginStatus(apiBaseUrl);
 
-    const { selectedCategory } = get();
+    const { selectedCategory, isInitialized } = get();
     const cacheKey = getCacheKey(selectedCategory);
 
     // 最近播放不缓存，始终实时获取
@@ -121,7 +122,15 @@ const useHomeStore = create<HomeState>((set, get) => ({
 
     set({ loading: true, contentData: [], pageStart: 0, hasMore: true, error: null });
     await get().loadMoreData();
-    await get().initEpisodeSelection();
+    // 只有在從未初始化過的情況下才執行
+    if (!isInitialized) {
+      try {
+        await get().initEpisodeSelection();
+        set({ isInitialized: true });
+      } catch (err) {
+        console.error("初始化失敗", err);
+      }
+    }
   },
 
   loadMoreData: async () => {
