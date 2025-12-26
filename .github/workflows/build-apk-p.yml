@@ -111,13 +111,17 @@ jobs:
       - name: Update Android versionCode and versionName
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          # 補齊成 4 段避免 awk 錯誤
+          # 將版本號依據 '.' 分割，若不足 4 段則補 0
           IFS='.' read -ra PARTS <<< "$VERSION"
           p1=${PARTS[0]:-0} p2=${PARTS[1]:-0} p3=${PARTS[2]:-0} p4=${PARTS[3]:-0}
-          CODE=$(printf "%d%03d%03d%03d" $p1 $p2 $p3 $p4)
-          
+
+          # 關鍵修正：使用 $((10#$var)) 強制以十進位處理數字，避免 008 造成的 octal 錯誤
+          CODE=$(printf "%d%03d%03d%03d" $((10#$p1)) $((10#$p2)) $((10#$p3)) $((10#$p4)))
+
+          # 更新 build.gradle
           sed -i "s/versionCode .*/versionCode ${CODE}/" android/app/build.gradle
           sed -i "s/versionName \".*\"/versionName \"${VERSION}\"/" android/app/build.gradle
+
           echo "Updated versionCode=${CODE}, versionName=${VERSION}"
 
       - name: Build TV APK
