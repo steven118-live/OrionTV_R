@@ -153,8 +153,8 @@ export default function HomeScreen() {
       try {
         await refreshPlayRecords();
         if (isLoggedInState) {
-          await new Promise((r) => setTimeout(r, 50));
-          useHomeStore.getState().initEpisodeSelection();
+          // await new Promise((r) => setTimeout(r, 50));
+          // useHomeStore.getState().initEpisodeSelection();
           hasInitialized.current = true;
           setInitReady(true);
         }
