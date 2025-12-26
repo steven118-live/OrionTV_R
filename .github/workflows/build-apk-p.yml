@@ -86,7 +86,7 @@ jobs:
           yarn cache clean
 
       - name: Install dependencies
-        run: yarn install
+        run: yarn install --frozen-lockfile
 
       # 決定版本號：tag 模式用 custom_version，否則用 package.json
       - name: Get version
