@@ -169,6 +169,7 @@ export default function HomeScreen() {
     apiConfigStatus.isValid,
     apiConfigStatus.isValidating,
     isLoggedInState,
+    refreshPlayRecords,
   ]);
 
   useFocusEffect(
