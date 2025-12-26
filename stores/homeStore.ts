@@ -124,11 +124,12 @@ const useHomeStore = create<HomeState>((set, get) => ({
     await get().loadMoreData();
     // 只有在從未初始化過的情況下才執行
     if (!isInitialized) {
+      set({ isInitialized: true });
       try {
         await get().initEpisodeSelection();
-        set({ isInitialized: true });
       } catch (err) {
         console.error("初始化失敗", err);
+        set({ isInitialized: false });
       }
     }
   },
