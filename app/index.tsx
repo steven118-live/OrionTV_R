@@ -63,14 +63,14 @@ export default function HomeScreen() {
   const isLoggedInState = useAuthStore((state) => state.isLoggedIn);
   const apiConfigStatus = useApiConfig();
   const flatListRef = useRef<FlatList>(null);
-  const hasInitialized = useRef(false);
+  // const hasInitialized = useRef(false);
   const prevRowRef = useRef(0);
   const [initReady, setInitReady] = useState(false);
   const [hideUI, setHideUI] = useState(false);
   const isTV = deviceType === "tv";
   const isTablet = deviceType === "tablet";
   const isMobile = deviceType === "mobile";
-  const hasShownInvalidToast = useRef(false);
+  // const hasShownInvalidToast = useRef(false);
   const backPressTimeRef = useRef<number | null>(null);
   const firstCategoryButtonRef = useRef<any>(null);
   const { width, height } = useWindowDimensions();
@@ -175,6 +175,9 @@ export default function HomeScreen() {
   useFocusEffect(
     useCallback(() => {
       refreshPlayRecords();
+      if (isLoggedInState) {
+        setInitReady(true);
+      }
     }, [refreshPlayRecords])
   );
 
