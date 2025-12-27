@@ -52,18 +52,14 @@ jobs:
             echo "ERROR: Tag ${TAG} not found on remote."
             exit 1
           fi
+          echo "TAG=${TAG}" >> $GITHUB_ENV
 
+      # 修正：增加 fetch-depth: 0 以便後續自動推送 Tag
       - name: Checkout code
         uses: actions/checkout@v3
         with:
           fetch-depth: 0
-          ref: ${{ (github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag') && format('v{0}', inputs.custom_version) || github.ref }}
-
-      - name: Log Build Info
-        run: |
-          echo "Target Type: ${{ inputs.buildTarget || 'push' }}"
-          echo "Current Commit: $(git rev-parse HEAD)"
-          echo "Current Ref: ${{ github.ref }}"
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag' && format('v{0}', inputs.custom_version) || github.ref }}
 
       - name: Generate BuildEnv.ts
         run: |
@@ -83,22 +79,23 @@ jobs:
           node-version: 18
           cache: "yarn"
 
-      - name: Install dependencies
+      - name: Clean for full build
+        if: ${{ inputs.buildMode == 'full' }}
         run: |
-          if [ "${{ inputs.buildMode }}" = "full" ]; then
-            rm -rf node_modules
-            yarn cache clean
-          fi
-          yarn install --frozen-lockfile
+          rm -rf node_modules
+          yarn cache clean
+
+      - name: Install dependencies
+        run: yarn install --frozen-lockfile
 
       - name: Get version
         id: version
         run: |
-          if [[ "${{ github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'tag' }}" == "true" ]]; then
+          if [[ "${{ inputs.buildTarget }}" == "tag" ]]; then
             echo "version=${{ inputs.custom_version }}" >> $GITHUB_OUTPUT
           else
-            VERSION=$(node -p "require('./package.json').version")
-            echo "version=${VERSION}" >> $GITHUB_OUTPUT
+            version=$(node -p "require('./package.json').version")
+            echo "version=${version}" >> $GITHUB_OUTPUT
           fi
 
       - name: Setup JDK
@@ -118,51 +115,81 @@ jobs:
           CODE=$(printf "%d%03d%03d%03d" $((10#$p1)) $((10#$p2)) $((10#$p3)) $((10#$p4)))
           sed -i "s/versionCode .*/versionCode ${CODE}/" android/app/build.gradle
           sed -i "s/versionName \".*\"/versionName \"${VERSION}\"/" android/app/build.gradle
-          echo "Updated to Code: $CODE, Name: $VERSION"
+          echo "Updated versionCode=${CODE}, versionName=${VERSION}"
 
       - name: Build TV APK
-        run: yarn build
+        run: |
+          if [ "${{ inputs.buildMode }}" = "full" ]; then
+            echo "Already cleaned before install"
+          fi
+          yarn build
 
       - name: Rename APK file
         id: rename-apk
         run: |
           mkdir -p artifacts
           VERSION="${{ steps.version.outputs.version }}"
+          BRANCH="${{ env.BRANCH_NAME }}"
+          BRANCH_SAFE="${BRANCH//\//-}"
+          
           if [[ "${{ inputs.buildTarget }}" == "tag" ]]; then
-            FINAL_NAME="${VERSION}"
+            FINAL_VERSION="${VERSION}"
           else
-            BRANCH_SAFE="${BRANCH_NAME//\//-}"
-            FINAL_NAME="${VERSION}-${BRANCH_SAFE}"
+            FINAL_VERSION="${VERSION}-${BRANCH_SAFE}"
           fi
-          cp android/app/build/outputs/apk/release/app-release.apk "artifacts/orionTV.${FINAL_NAME}.apk"
-          echo "apk_version=${FINAL_NAME}" >> $GITHUB_OUTPUT
-          echo "target_tag=v${VERSION}" >> $GITHUB_OUTPUT
+          
+          cp android/app/build/outputs/apk/release/app-release.apk "artifacts/orionTV.${FINAL_VERSION}.apk"
+          echo "apk_version=${FINAL_VERSION}" >> $GITHUB_OUTPUT
+          echo "plain_version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "APK: artifacts/orionTV.${FINAL_VERSION}.apk"
 
-      # 核心逻辑：如果是 Branch/Push 模式，且 Tag 不存在，就自动建立 Tag
-      - name: Auto Tagging (Branch/Push mode only)
-        if: ${{ github.event_name == 'push' || (github.event_name == 'workflow_dispatch' && inputs.buildTarget == 'branch') }}
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.rename-apk.outputs.apk_version }}
+          path: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
+          retention-days: 7
+
+      - name: Check APK version info
         run: |
-          TAG_NAME="${{ steps.rename-apk.outputs.target_tag }}"
-          if ! git ls-remote --tags origin | grep -q "refs/tags/${TAG_NAME}$"; then
+          sudo apt-get update && sudo apt-get install -y aapt
+          aapt dump badging "artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk" | grep version
+
+      # 修正：Branch 模式下，如果 Tag 不存在則自動建立，確保 Release Source 是目前的 Commit
+      - name: Auto Tag Sync (branch mode only)
+        if: ${{ inputs.buildTarget != 'tag' }}
+        run: |
+          TAG="v${{ steps.rename-apk.outputs.plain_version }}"
+          if ! git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag $TAG_NAME
-            git push origin $TAG_NAME
-            echo "Successfully created and pushed tag $TAG_NAME"
-          else
-            echo "Tag $TAG_NAME already exists, skipping."
+            git tag $TAG
+            git push origin $TAG
           fi
 
-      - name: Create or Update Release
+      - name: Create Release (only for branch builds)
+        if: ${{ inputs.buildTarget != 'tag' }}
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.rename-apk.outputs.target_tag }}
-          name: Release ${{ steps.rename-apk.outputs.target_tag }}
+          # 修改為對應 package.json 的 Tag，確保 Source Code 內容正確
+          tag_name: v${{ steps.rename-apk.outputs.plain_version }}
+          name: Release v${{ steps.rename-apk.outputs.plain_version }}
           body: |
-            Automated Build
-            - Commit: ${{ github.sha }}
-            - Mode: ${{ inputs.buildTarget || 'git-push' }}
-            - Source Branch: ${{ github.ref_name }}
+            Automated release for version v${{ steps.rename-apk.outputs.plain_version }}.
+            Repo: ${{ github.repository }}
+            Branch: ${{ github.ref_name }}
+            Commit: ${{ github.sha }}
+          draft: false
+          prerelease: false
+          files: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload to existing Release (tag builds)
+        if: ${{ inputs.buildTarget == 'tag' }}
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.version.outputs.version }}
           files: artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
