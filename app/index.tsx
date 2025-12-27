@@ -151,7 +151,7 @@ export default function HomeScreen() {
     if (hasInitialized.current) return;
     const initialize = async () => {
       try {
-        // await refreshPlayRecords();
+        await refreshPlayRecords();
         if (isLoggedInState) {
           // useHomeStore.getState().initEpisodeSelection();
           hasInitialized.current = true;
