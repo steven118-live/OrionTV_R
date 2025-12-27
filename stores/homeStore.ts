@@ -121,7 +121,7 @@ const useHomeStore = create<HomeState>((set, get) => ({
 
     set({ loading: true, contentData: [], pageStart: 0, hasMore: true, error: null });
     await get().loadMoreData();
-    // await get().initEpisodeSelection();
+    await get().initEpisodeSelection();
   },
 
   loadMoreData: async () => {

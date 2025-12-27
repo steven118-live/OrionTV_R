@@ -63,14 +63,14 @@ export default function HomeScreen() {
   const isLoggedInState = useAuthStore((state) => state.isLoggedIn);
   const apiConfigStatus = useApiConfig();
   const flatListRef = useRef<FlatList>(null);
-  // const hasInitialized = useRef(false);
+  const hasInitialized = useRef(false);
   const prevRowRef = useRef(0);
   const [initReady, setInitReady] = useState(false);
   const [hideUI, setHideUI] = useState(false);
   const isTV = deviceType === "tv";
   const isTablet = deviceType === "tablet";
   const isMobile = deviceType === "mobile";
-  // const hasShownInvalidToast = useRef(false);
+  const hasShownInvalidToast = useRef(false);
   const backPressTimeRef = useRef<number | null>(null);
   const firstCategoryButtonRef = useRef<any>(null);
   const { width, height } = useWindowDimensions();
@@ -138,46 +138,41 @@ export default function HomeScreen() {
     return leftover / (totalColumns + 1);
   };
 
-  // useEffect(() => {
-  //   if (apiConfigStatus.needsConfiguration) return;
-  //   if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
-  //     ToastAndroid.show("API 目前连接尚有问题..检查服务器中..请稍待", ToastAndroid.LONG); //LONG SHORT
-  //     hasShownInvalidToast.current = true;
-  //     return;
-  //   }
-  //   if (apiConfigStatus.isValid === true) {
-  //     hasShownInvalidToast.current = false;
-  //   }
-  //   if (hasInitialized.current) return;
-  //   const initialize = async () => {
-  //     try {
-  //       await refreshPlayRecords();
-  //       if (isLoggedInState) {
-  //         // await new Promise((r) => setTimeout(r, 50));
-  //         // useHomeStore.getState().initEpisodeSelection();
-  //         hasInitialized.current = true;
-  //         setInitReady(true);
-  //       }
-  //     } catch (err) {
-  //       console.error("Home 初始化失败", err);
-  //       hasInitialized.current = false;
-  //     }
-  //   };
-  //   initialize();
-  // }, [
-  //   apiConfigStatus.needsConfiguration,
-  //   apiConfigStatus.isValid,
-  //   apiConfigStatus.isValidating,
-  //   isLoggedInState,
-  //   refreshPlayRecords,
-  // ]);
+  useEffect(() => {
+    if (apiConfigStatus.needsConfiguration) return;
+    // if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
+    //   ToastAndroid.show("API 检查服务器中..请稍待", ToastAndroid.SHORT); //LONG SHORT
+    //   hasShownInvalidToast.current = true;
+    //   return;
+    // }
+    // if (apiConfigStatus.isValid === true) {
+    //   hasShownInvalidToast.current = false;
+    // }
+    if (hasInitialized.current) return;
+    const initialize = async () => {
+      try {
+        // await refreshPlayRecords();
+        if (isLoggedInState) {
+          // useHomeStore.getState().initEpisodeSelection();
+          hasInitialized.current = true;
+          setInitReady(true);
+        }
+      } catch (err) {
+        console.error("Home 初始化失败", err);
+        hasInitialized.current = false;
+      }
+    };
+    initialize();
+  }, [
+    apiConfigStatus.needsConfiguration,
+    apiConfigStatus.isValid,
+    apiConfigStatus.isValidating,
+    isLoggedInState,
+  ]);
 
   useFocusEffect(
     useCallback(() => {
       refreshPlayRecords();
-      if (isLoggedInState) {
-        setInitReady(true);
-      }
     }, [refreshPlayRecords])
   );
 
