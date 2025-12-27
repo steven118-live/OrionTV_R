@@ -138,39 +138,39 @@ export default function HomeScreen() {
     return leftover / (totalColumns + 1);
   };
 
-  useEffect(() => {
-    if (apiConfigStatus.needsConfiguration) return;
-    if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
-      ToastAndroid.show("API 目前连接尚有问题..检查服务器中..请稍待", ToastAndroid.LONG); //LONG SHORT
-      hasShownInvalidToast.current = true;
-      return;
-    }
-    if (apiConfigStatus.isValid === true) {
-      hasShownInvalidToast.current = false;
-    }
-    if (hasInitialized.current) return;
-    const initialize = async () => {
-      try {
-        await refreshPlayRecords();
-        if (isLoggedInState) {
-          // await new Promise((r) => setTimeout(r, 50));
-          // useHomeStore.getState().initEpisodeSelection();
-          hasInitialized.current = true;
-          setInitReady(true);
-        }
-      } catch (err) {
-        console.error("Home 初始化失败", err);
-        hasInitialized.current = false;
-      }
-    };
-    initialize();
-  }, [
-    apiConfigStatus.needsConfiguration,
-    apiConfigStatus.isValid,
-    apiConfigStatus.isValidating,
-    isLoggedInState,
-    refreshPlayRecords,
-  ]);
+  // useEffect(() => {
+  //   if (apiConfigStatus.needsConfiguration) return;
+  //   if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
+  //     ToastAndroid.show("API 目前连接尚有问题..检查服务器中..请稍待", ToastAndroid.LONG); //LONG SHORT
+  //     hasShownInvalidToast.current = true;
+  //     return;
+  //   }
+  //   if (apiConfigStatus.isValid === true) {
+  //     hasShownInvalidToast.current = false;
+  //   }
+  //   if (hasInitialized.current) return;
+  //   const initialize = async () => {
+  //     try {
+  //       await refreshPlayRecords();
+  //       if (isLoggedInState) {
+  //         // await new Promise((r) => setTimeout(r, 50));
+  //         // useHomeStore.getState().initEpisodeSelection();
+  //         hasInitialized.current = true;
+  //         setInitReady(true);
+  //       }
+  //     } catch (err) {
+  //       console.error("Home 初始化失败", err);
+  //       hasInitialized.current = false;
+  //     }
+  //   };
+  //   initialize();
+  // }, [
+  //   apiConfigStatus.needsConfiguration,
+  //   apiConfigStatus.isValid,
+  //   apiConfigStatus.isValidating,
+  //   isLoggedInState,
+  //   refreshPlayRecords,
+  // ]);
 
   useFocusEffect(
     useCallback(() => {
