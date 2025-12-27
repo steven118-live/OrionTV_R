@@ -54,7 +54,7 @@ jobs:
           fi
           echo "TAG=${TAG}" >> $GITHUB_ENV
 
-      # 修正：增加 fetch-depth: 0 以便後續自動推送 Tag
+      # 修正：增加 fetch-depth 以便能操作 git tag
       - name: Checkout code
         uses: actions/checkout@v3
         with:
@@ -140,7 +140,6 @@ jobs:
           
           cp android/app/build/outputs/apk/release/app-release.apk "artifacts/orionTV.${FINAL_VERSION}.apk"
           echo "apk_version=${FINAL_VERSION}" >> $GITHUB_OUTPUT
-          echo "plain_version=${VERSION}" >> $GITHUB_OUTPUT
           echo "APK: artifacts/orionTV.${FINAL_VERSION}.apk"
 
       - name: Upload APK artifact
@@ -155,27 +154,25 @@ jobs:
           sudo apt-get update && sudo apt-get install -y aapt
           aapt dump badging "artifacts/orionTV.${{ steps.rename-apk.outputs.apk_version }}.apk" | grep version
 
-      # 修正：Branch 模式下，如果 Tag 不存在則自動建立，確保 Release Source 是目前的 Commit
-      - name: Auto Tag Sync (branch mode only)
+      # 關鍵修正：如果是 branch 模式，強制更新 Tag 指向當前 Commit
+      # 這確保了 Release 的 Source code 會跟隨目前的 push
+      - name: Force Update Tag (only for branch builds)
         if: ${{ inputs.buildTarget != 'tag' }}
         run: |
-          TAG="v${{ steps.rename-apk.outputs.plain_version }}"
-          if ! git ls-remote --tags origin | grep -q "refs/tags/${TAG}$"; then
-            git config user.name "github-actions[bot]"
-            git config user.email "github-actions[bot]@users.noreply.github.com"
-            git tag $TAG
-            git push origin $TAG
-          fi
+          TAG="v${{ steps.rename-apk.outputs.apk_version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f $TAG
+          git push origin $TAG --force
 
       - name: Create Release (only for branch builds)
         if: ${{ inputs.buildTarget != 'tag' }}
         uses: softprops/action-gh-release@v2
         with:
-          # 修改為對應 package.json 的 Tag，確保 Source Code 內容正確
-          tag_name: v${{ steps.rename-apk.outputs.plain_version }}
-          name: Release v${{ steps.rename-apk.outputs.plain_version }}
+          tag_name: v${{ steps.rename-apk.outputs.apk_version }}
+          name: Release v${{ steps.rename-apk.outputs.apk_version }}
           body: |
-            Automated release for version v${{ steps.rename-apk.outputs.plain_version }}.
+            Automated release for version v${{ steps.rename-apk.outputs.apk_version }}.
             Repo: ${{ github.repository }}
             Branch: ${{ github.ref_name }}
             Commit: ${{ github.sha }}
