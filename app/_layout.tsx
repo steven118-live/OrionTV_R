@@ -17,7 +17,6 @@ import { UpdateModal } from "@/components/UpdateModal";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useApiConfig } from "@/hooks/useApiConfig";
 import Logger from "@/utils/Logger";
-import TrackPlayer from "react-native-track-player";
 import { api } from "@/services/api";
 
 const logger = Logger.withTag("RootLayout");
@@ -63,7 +62,6 @@ export default function RootLayout() {
 
     const preloadApp = async () => {
       try {
-        await TrackPlayer.setupPlayer();
         logger.info("TrackPlayer initialized");
 
         // API 健康檢查 + 重試
