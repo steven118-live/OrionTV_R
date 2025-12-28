@@ -1,4 +1,4 @@
-// app/index.tsx （完整覆蓋版）
+// app/index.tsx （修正 TS 錯誤版）
 import React, { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
@@ -169,12 +169,8 @@ export default function HomeScreen() {
 
   useFocusEffect(
     useCallback(() => {
+      // 合併刷新與返回鍵邏輯，防止進入播放器時多次觸發刷新
       refreshPlayRecords();
-    }, [refreshPlayRecords])
-  );
-
-  useFocusEffect(
-    useCallback(() => {
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
       let subscription: any = null;
 
@@ -214,7 +210,7 @@ export default function HomeScreen() {
         if (subscription) subscription.remove();
         backPressTimeRef.current = null;
       };
-    }, [initReady, hideUI, isTV, isTablet, fadeHeaderAnim])
+    }, [refreshPlayRecords, initReady, hideUI, isTV, isTablet, fadeHeaderAnim])
   );
 
   useEffect(() => {
@@ -283,7 +279,9 @@ export default function HomeScreen() {
       setHideUI(false);                  // 強制取消隱藏狀態
       return;
     }
-    Animated.timing(fadeHeaderAnim, { toValue: hideUI ? 0 : 1, duration: 300, useNativeDriver: true }).start();
+    // 檢查目前值，若一致則不重複觸發動畫
+    const currentFadeValue = hideUI ? 0 : 1;
+    Animated.timing(fadeHeaderAnim, { toValue: currentFadeValue, duration: 300, useNativeDriver: true }).start();
   }, [hideUI, enableHeaderAutoHide]);
 
   useEffect(() => {
@@ -559,6 +557,3 @@ export default function HomeScreen() {
   if (isTV) return content;
   return <ResponsiveNavigation>{content}</ResponsiveNavigation>;
 }
-
-// dynamicStyles 保持你原本的完美寫法，不動
-const dynamicStyles = StyleSheet.create({ /* ... 你原本的 */ });
