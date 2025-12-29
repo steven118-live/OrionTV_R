@@ -1,4 +1,4 @@
-// app/index.tsx （完整覆蓋版）
+// app/index.tsx （行為完全一致 + 核心問題修復版）
 import React, { useEffect, useCallback, useRef, useState, useMemo } from "react";
 import {
   View,
@@ -112,18 +112,18 @@ export default function HomeScreen() {
     const config = {
       low: {
         initial: Math.floor(cardsInFirstScreen * 0.6),   // 超省：只渲染 0.6 屏
-        batch: Math.max(4, itemsPerRow),                 // 最小批次
-        window: 7,                                       // 極小虛擬化窗口
+        batch: Math.max(4, itemsPerRow),                  // 最小批次
+        window: 7,                                        // 極小虛擬化窗口
       },
       balanced: {
-        initial: cardsInFirstScreen,                     // 標準：1.5 屏（你原本的設計）
+        initial: cardsInFirstScreen,                      // 標準：1.5 屏（你原本的設計）
         batch: itemsPerRow * 3,
         window: Math.max(11, Math.ceil(visibleRows * 4) + 1),
       },
       high: {
-        initial: cardsInFirstScreen * 3,                 // 極致：4.5 屏一次渲染
-        batch: itemsPerRow * 8,                          // 超大批次
-        window: 31,                                      // 超大窗口，幾乎不虛擬化
+        initial: cardsInFirstScreen * 3,                  // 極致：4.5 屏一次渲染
+        batch: itemsPerRow * 8,                           // 超大批次
+        window: 31,                                       // 超大窗口，幾乎不虛擬化
       },
     };
 
@@ -283,7 +283,12 @@ export default function HomeScreen() {
       setHideUI(false);                  // 強制取消隱藏狀態
       return;
     }
-    Animated.timing(fadeHeaderAnim, { toValue: hideUI ? 0 : 1, duration: 300, useNativeDriver: true }).start();
+    // 核心修復：僅在值真正改變時才執行動畫，防止重渲染干擾播放器
+    const targetValue = hideUI ? 0 : 1;
+    // @ts-ignore - 讀取動畫當前值，避免重複觸發
+    if (fadeHeaderAnim._value !== targetValue) {
+      Animated.timing(fadeHeaderAnim, { toValue: targetValue, duration: 300, useNativeDriver: true }).start();
+    }
   }, [hideUI, enableHeaderAutoHide]);
 
   useEffect(() => {
@@ -559,6 +564,3 @@ export default function HomeScreen() {
   if (isTV) return content;
   return <ResponsiveNavigation>{content}</ResponsiveNavigation>;
 }
-
-// dynamicStyles 保持你原本的完美寫法，不動
-const dynamicStyles = StyleSheet.create({ /* ... 你原本的 */ });
