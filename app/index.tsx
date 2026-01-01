@@ -140,20 +140,24 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (apiConfigStatus.needsConfiguration) return;
-    // if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
-    //   ToastAndroid.show("API 检查服务器中..请稍待", ToastAndroid.SHORT); //LONG SHORT
-    //   hasShownInvalidToast.current = true;
-    //   return;
-    // }
-    // if (apiConfigStatus.isValid === true) {
-    //   hasShownInvalidToast.current = false;
-    // }
+    if (apiConfigStatus.isValid === false && !hasShownInvalidToast.current) {
+      ToastAndroid.show("目前检查API服务器中..请稍待", ToastAndroid.LONG); //LONG SHORT
+      hasShownInvalidToast.current = true;
+      return;
+    }
+    if (apiConfigStatus.isValid === true) {
+      hasShownInvalidToast.current = false;
+    }
     if (hasInitialized.current) return;
     const initialize = async () => {
       try {
         await refreshPlayRecords();
-        hasInitialized.current = true;
-        setInitReady(true);
+        if (isLoggedInState) {
+          await new Promise(resolve => setTimeout(resolve, 50)); // 延遲 50ms
+          useHomeStore.getState().initEpisodeSelection();
+          hasInitialized.current = true;
+          setInitReady(true);
+        }
       } catch (err) {
         console.error("Home 初始化失败", err);
         hasInitialized.current = false;
