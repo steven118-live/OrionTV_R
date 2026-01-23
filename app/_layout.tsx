@@ -14,7 +14,6 @@ import LoginModal from "@/components/LoginModal";
 import useAuthStore from "@/stores/authStore";
 import { useUpdateStore, initUpdateStore } from "@/stores/updateStore";
 import { UpdateModal } from "@/components/UpdateModal";
-import { UPDATE_CONFIG } from "@/constants/UpdateConfig";
 import { useResponsiveLayout } from "@/hooks/useResponsiveLayout";
 import { useApiConfig } from "@/hooks/useApiConfig";
 import Logger from "@/utils/Logger";
@@ -30,7 +29,7 @@ export default function RootLayout() {
   });
 
   // SettingsStore
-  const { loadSettings, apiBaseUrl, remoteInputEnabled } = useSettingsStore();
+  const { apiBaseUrl, remoteInputEnabled } = useSettingsStore();
   const { startServer, stopServer } = useRemoteControlStore();
   const { checkLoginStatus } = useAuthStore();
   const { checkForUpdate, lastCheckTime } = useUpdateStore();
@@ -41,17 +40,12 @@ export default function RootLayout() {
 
   // Step 1: 載入 settingsStore 設定 + 初始化 update store
   useEffect(() => {
-    const initializeApp = async () => {
-      await loadSettings();
-    };
-    initializeApp();
-    initUpdateStore(); // 初始化更新存储
-  }, [loadSettings]);
+    useSettingsStore.getState().loadSettings();
+    initUpdateStore();
+  }, []);
 
   useEffect(() => {
-    if (apiBaseUrl) {
-      checkLoginStatus(apiBaseUrl);
-    }
+    if (apiBaseUrl) checkLoginStatus(apiBaseUrl);
   }, [apiBaseUrl, checkLoginStatus]);
 
   // Step 2: 字型載入完成 → 隱藏 Splash
@@ -60,16 +54,6 @@ export default function RootLayout() {
       if (fontError) logger.warn("字型載入失敗", fontError);
     }
   }, [fontsLoaded, fontError]);
-  // 检查更新
-  useEffect(() => {
-    if (fontsLoaded && UPDATE_CONFIG.AUTO_CHECK && Platform.OS === 'android') {
-      // 检查是否需要自动检查更新
-      const shouldCheck = Date.now() - lastCheckTime > UPDATE_CONFIG.CHECK_INTERVAL;
-      if (shouldCheck) {
-        checkForUpdate(true); // 静默检查
-      }
-    }
-  }, [fontsLoaded, lastCheckTime, checkForUpdate]);
 
   // Step 3: 核心初始化（只執行一次）
   useEffect(() => {
@@ -128,14 +112,14 @@ export default function RootLayout() {
     <SafeAreaProvider>
       <ThemeProvider value={colorScheme === "dark" ? DarkTheme : DefaultTheme}>
         <View style={styles.container}>
-          <Stack>
-            <Stack.Screen name="index" options={{ headerShown: false }} />
-            <Stack.Screen name="detail" options={{ headerShown: false }} />
-            {Platform.OS !== "web" && <Stack.Screen name="play" options={{ headerShown: false }} />}
-            <Stack.Screen name="search" options={{ headerShown: false }} />
-            <Stack.Screen name="live" options={{ headerShown: false }} />
-            <Stack.Screen name="settings" options={{ headerShown: false }} />
-            <Stack.Screen name="favorites" options={{ headerShown: false }} />
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="index" />
+            <Stack.Screen name="detail" />
+            {Platform.OS !== "web" && <Stack.Screen name="play" />}
+            <Stack.Screen name="search" />
+            <Stack.Screen name="live" />
+            <Stack.Screen name="settings" />
+            <Stack.Screen name="favorites" />
             <Stack.Screen name="+not-found" />
           </Stack>
         </View>
