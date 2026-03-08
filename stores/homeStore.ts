@@ -242,7 +242,14 @@ const useHomeStore = create<HomeState>((set, get) => ({
         errorMessage = "请点击右上角设置按钮，配置您的服务器地址";
       } else if (err.message === "UNAUTHORIZED") {
         errorMessage = "认证失败，请重新登录";
-        useAuthStore.setState({ isLoggedIn: false, isLoginModalVisible: true });
+        // 先清除可能存在的舊狀態
+        useAuthStore.setState({ isLoggedIn: false });
+
+        // 稍微延遲 (例如 100ms) 再開啟彈窗，避開 React 的 batch update 導致的衝突
+        setTimeout(() => {
+          useAuthStore.setState({ isLoginModalVisible: true });
+        }, 100)
+        // useAuthStore.setState({ isLoggedIn: false, isLoginModalVisible: true });
       } else if (err.message.includes("Network")) {
         errorMessage = "网络连接失败，请检查网络连接";
       } else if (err.message.includes("timeout")) {

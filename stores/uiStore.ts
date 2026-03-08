@@ -20,7 +20,7 @@ export const useUIStore = create<UIState>()(
   persist(
     (set) => ({
       enableHeaderAutoHide: true,          // 預設開啟
-      aiMode: AIMode.Balanced,             // 預設模式保持一致
+      aiMode: AIMode.HighPerformance,             // 預設模式保持一致
       toggleHeaderAutoHide: () =>
         set((state) => ({ enableHeaderAutoHide: !state.enableHeaderAutoHide })),
       setAIMode: (mode: AIMode) => set({ aiMode: mode }),

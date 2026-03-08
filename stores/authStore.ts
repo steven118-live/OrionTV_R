@@ -23,7 +23,8 @@ const useAuthStore = create<AuthState>((set) => ({
   hideLoginModal: () => set({ isLoginModalVisible: false }),
   checkLoginStatus: async (apiBaseUrl?: string) => {
     if (!apiBaseUrl) {
-      set({ isLoggedIn: false, isLoginModalVisible: false });
+      // 修正：只改登入狀態，不要去動 Modal 的顯示狀態
+      set({ isLoggedIn: false });
       return;
     }
     try {
@@ -60,12 +61,9 @@ const useAuthStore = create<AuthState>((set) => ({
       const authToken = await AsyncStorage.getItem('authCookies');
       if (!authToken) {
         if (serverConfig && serverConfig.StorageType === "localstorage") {
-          const loginResult = await api.login().catch(() => {
-            set({ isLoggedIn: false, isLoginModalVisible: true });
-          });
-          if (loginResult && loginResult.ok) {
-            set({ isLoggedIn: true });
-          }
+          await api.login()
+            .then(() => set({ isLoggedIn: true, isLoginModalVisible: false }))
+            .catch(() => set({ isLoggedIn: false, isLoginModalVisible: true }));
         } else {
           set({ isLoggedIn: false, isLoginModalVisible: true });
         }
@@ -74,10 +72,10 @@ const useAuthStore = create<AuthState>((set) => ({
       }
     } catch (error) {
       logger.error("Failed to check login status:", error);
+      // 修正：發生錯誤時，除非必要，否則不要設定 isLoginModalVisible: false
+      set({ isLoggedIn: false });
       if (error instanceof Error && error.message === "UNAUTHORIZED") {
-        set({ isLoggedIn: false, isLoginModalVisible: true });
-      } else {
-        set({ isLoggedIn: false });
+        set({ isLoginModalVisible: true });
       }
     }
   },
